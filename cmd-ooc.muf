@@ -28,16 +28,12 @@ $NOTE Fairly smart OOC formatting deal
 : main
    STRIP DUP 1 STRCUT SWAP (s -- s' s'2 s'1)
    dup ":" strcmp 0 = IF
-      "COLON" show
       pop SWAP pop " " SWAP STRCAT
    ELSE dup "\"" strcmp 0 = IF
-      "QUOTE" show
       pop SWAP pop " says \"" SWAP STRCAT "\"" STRCAT
    ELSE DUP "#" STRCMP 0 = IF
       printhelp EXIT
-      "HASH" show
    ELSE
-      "FALLTHROUGH" show
       pop pop
       " says \"" SWAP STRCAT "\"" STRCAT
    THEN THEN THEN (s)
