@@ -4,25 +4,39 @@ i
 ( OOC say/pose. Link an action called 'ooc' to it.)
 ( Should interpret quotes, colon, and hash roughly correct. )
 ()
-( Todo: Configurable ANSI. Actual help. )
 
 $AUTHOR BlackDjinn at Gretna Green
-$VERSION 0.1000
+$VERSION 1.0000
 $NOTE Fairly smart OOC formatting deal
 
-: show
-   me @ swap notify
-;
+$DEF show me @ swap notify
+$DEF defaultcolors "cyan"
 
 : prependstring ( -- s )
-   "[OOC]" "black,bg_cyan" TEXTATTR
+   "[OOC]"
+   me @ "/ooc/colors" getpropstr
+   dup not IF
+      pop defaultcolors
+   THEN
+   TEXTATTR
    " "
    ME @ NAME
    STRCAT STRCAT
 ;
 
 : printhelp
-  "This should have something useful about help for OOC" show
+  "Help for OOC" show
+  "------------" show
+  "Usage:" show
+  "  Say ooc:   ooc stuff" show
+  "  Say ooc:   ooc \"stuff" show
+  "  Pose ooc:  ooc :stuff" show
+  "  Show this: ooc #help" show
+  "" show
+  "Propeties:" show
+  "  @set me=/ooc/colors:colorist" show
+  "    where 'colorlist' is a comma seperated list of ANSI attributes." show
+  "------------" show
 ;
 
 : main
