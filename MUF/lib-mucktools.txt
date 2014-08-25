@@ -1,0 +1,482 @@
+@q
+@program lib-mucktools
+1 9999 d
+i
+( Lib-MuckTools   v1.0    Jessy @ FurryMUCK    3/97
+  
+  This is the library of shared code for the MuckTools programs.
+  Most functions are very general; the library may be useful for
+  anyone needing to handle lists and directories, read input, or 
+  format output. NOTE: This library works, but really isn't mature
+  at present... things currently handled by variables need to be
+  handled on the stack, and the directory-handling functions need
+  to be made recursive.
+  
+  INSTALLATION:
+  
+  Port the program, and set it Link_OK. Do not set the program 
+  Wizard: players would easily be able to write to restricted
+  lists and properties.
+  
+  Link a temporary action to the program and type the action name.
+  This installs the program, setting _defs, _doc, and the global
+  registered name. Recycle the install action.
+  
+  PUBLIC FUNCTIONS:
+  
+  3-col      [ {rng} i --  ]
+    Outputs the top i things on the stack in 3 columns, formatted
+    to 72 char screen width. The top item on the stack is shown
+    last. Strings are shown as-is; integers are converted to strings;
+    #dbrefs are converted to names.
+    
+  3-coln     [ {rng} i --  ]
+    Numbers and outputs the top i things on the stack in 3 columns,
+    formatted to 72 char screen width. The top item on the stack is
+    shown last. Strings are shown as-is; integers are converted to
+    strings; #dbrefs are converted to names.
+    
+  A-An       [ s -- s' ]
+    Returns s prepended with 'an' if s begins with a vowel; otherwise,
+    prepends with 'a'.
+    
+  Pad        [ s i -- s' ]
+    Returns s padded to i chars, spaces right.
+    
+  LPad       [ s i -- s' ]
+    Returns s padded to i chars, spaces left.
+    
+  Dots       [ s i -- s' ]
+    Returns s padded with dot leader to i chars, dots right.
+    
+  LDots      [ s i -- s' ]
+    Returns s padded with dot leader to i chars, dots left.
+    
+  SayPose    [   -- s ]
+    Performs READ, scanning for says and poses. Says and poses
+    are output; returns first s that is not a say or pose. Output
+    to user is appended with <in <program name>>. The .muf extension
+    is trimmed from the program name.
+    
+  QCheck     [ s -- s ]
+    Kills process if s is '.quit', '.end', or a prefix of these. 
+    Notifies user with string ">>  Done."
+    
+  ReadYesNo  [   -- s ]
+    Reads via SayPose, returning true for 'yes' or a prefix of 'yes',
+    and false for 'no' or 'n'. Kills process for '.quit', '.end', or
+    or a prefix of these.
+    
+  NoPlayer   [ s --  ]
+    Notifies user that no player with name s was found, then kills
+    process.
+    
+  MainName   [ s -- s ]
+    Return s, stripped of alias forms. 'Out <0>;out;ou;o' would return
+    'Out <O>'.
+    
+  ParseThis  [ d s --  ]
+    Returns d's prop s, parsed for MPI.
+    
+  RemoveDir  [ d s --  ]
+    Removes directory s from d.
+    
+  RemoveList [ d s --  ]
+    Removes list s from d.
+    
+  MoveDir    [ d s d' s' --  ]
+    Moves directory s on d to directory s' on d'. NOTE: MoveDir
+    is currently not recursive: subdirectories and dirs with
+    subdirs are efficiently moved into oblivion.
+    
+  Lib-MuckTools may be freely ported. Please comment any changes.
+)
+  
+lvar libBoolean
+lvar libString
+lvar libCounter
+lvar libCounter2
+lvar libScratch
+  
+$define Tell me @ swap notify $enddef
+$define counter++ libCounter @ 1 + libCounter ! $enddef
+$define scounter++ libCounter @ atoi 1 + intostr libCounter ! $enddef
+      
+: Pad  ( s i -- s )                         (* pad string s to i chars *)
+                             (* Pads are often done in loops; use the
+                                cheaper but limited-length method of
+                                cat/cutting a string, rather than loop *)
+    swap
+    "                                                                   "
+    strcat
+    swap strcut pop
+;
+Public Pad
+  
+: LPad  ( s i -- s )           (* pad string s to i chars, spaces left *)
+    swap
+    "                                                                   "
+    swap strcat dup strlen rot - strcut swap pop
+;
+Public LPad
+   
+: Dots  ( s i -- s )          (* pad string s with dot leader, i chars *)
+   
+    swap
+    "..................................................................."
+    strcat
+    swap strcut pop
+;
+Public Dots
+  
+: LDots  ( s i -- s ) (* pad string s with dot leader to left, i chars *)
+    swap
+    "..................................................................."
+    swap strcat dup strlen rot - strcut swap pop
+;
+Public LDots
+  
+: A-An  ( s -- s' )               (* return s prepended w/ 'a' or 'an' *)
+    
+    dup 1 strcut pop "{a|e|i|o|u}" smatch if
+        "an " swap strcat
+        else
+            "a " swap strcat
+    then
+;   
+Public A-An
+  
+: ParseThis  ( d s -- s )        (* returns d's prop s, parsed for MPI *)
+ 
+   dup 3 pick swap getpropstr 0 parseprop
+;
+Public ParseThis
+  
+: SayPose  (  --  )         (* scan keyboard input for poses and says. *)
+                                  (* emit poses and says, and continue *)
+ 
+    begin                                 (* BEGIN INPUT-SCANNING LOOP *)
+           (* does input begin with " or say ? -- say if so & continue *)
+        read 
+                                  (* emit poses and says, and continue *)
+        dup "\"" stringpfx
+        over "say " stringpfx or if
+            dup "say " stringpfx if
+                4 strcut
+                else
+                    1 strcut
+            then swap pop
+            me @ name " says, \"" strcat swap strcat "\"" strcat dup
+            loc @ me @ rot notify_except
+            
+                                             (* tack on an 'in program' 
+                                                note for the player    *)
+            " (in " strcat
+            caller name dup "*.muf" smatch if
+                dup strlen 4 - strcut pop
+            then
+            strcat ")" strcat Tell
+            continue        
+    
+        then
+ 
+         (* does input begin with : or pose ? -- pose if so & continue *)
+        dup ":" stringpfx
+        over "pose " stringpfx or if
+            dup "pose " stringpfx if
+                5 strcut
+                else
+                    1 strcut
+            then swap pop
+            me @ name
+            over "'*" smatch not if
+                " " strcat
+            then
+            swap strcat dup
+            loc @ me @ rot notify_except
+            " (in " strcat
+            caller name dup "*.muf" smatch if
+                dup strlen 4 - strcut pop
+            then
+            strcat ")" strcat Tell
+            continue
+        then
+        exit                           (* it's not a pose or say; exit *)
+   repeat                                   (* END INPUT-SCANNING LOOP *)
+;
+Public SayPose
+  
+: QCheck  (  -- i )(* wrap smatch for .q in an if, to avoid null string
+                      match error if user enters a string of all spaces,
+                      which SayPose would strip to a null string       *)
+    dup if
+        dup ".quit" swap stringpfx 
+        over ".end" swap stringpfx or if
+            pop ">>  Done." Tell pid kill
+        then
+    then
+;
+Public QCheck
+  
+: ReadYesNo  (  -- i )            (* read user input; return 1 for 'yes', 
+                                     2 for 'no'; kill process for .quiut *)
+    begin
+        SayPose strip QCheck
+    
+        dup "yes" swap stringpfx if
+            pop 1 break
+            else
+                "no" swap stringpfx if
+                    0 break
+                then
+        then
+        ">>  Entry not understood." Tell
+    repeat
+;
+Public ReadYesNo
+  
+: NoPlayer  ( s --  )          (* notify: player s not found. kill job *)
+    
+    ">>  Player " swap 1 strcut swap toupper swap 
+    strcat strcat " not found." strcat
+    pid kill
+;
+Public NoPlayer
+  
+: MainName  ( s -- s )              (* strips aliases from a trigger name; 
+                                      used here to format help screen    *)
+                                       
+                (* exit if no aliases; else separate and record how many *)
+    ";" explode dup 1 = not if  
+        libCounter !
+        else
+           pop exit
+    then
+                                     (* loop, popping an alias each time *)
+    begin                                     (* BEGIN NAME-POPPING LOOP *)
+        libCounter @ 1 = if
+            break                          (* break, returning main name *)
+        then
+        swap pop
+        libCounter @ 1 - libCounter !
+    repeat                                      (* END NAME-POPPING LOOP *)
+;
+Public MainName
+   
+: RemoveList  ( d s --  )                      (* remove list s from d *)
+    
+    "#" strcat libString ! libScratch !
+    libScratch @ libString @ remove_prop
+    libString @ "/" strcat libString !
+    
+    "1" libCounter !
+    begin
+        libScratch @ libString @ libCounter @ strcat over over
+        getpropstr while
+        remove_prop
+        scounter++
+    repeat
+    pop pop
+;
+Public RemoveList
+  
+: RemoveDir  ( d s --   )                      (* remove list s from d *)
+    
+    libString ! libScratch !
+    libScratch @ libString @ remove_prop
+    libString @ "/" strcat libString !
+    
+    "1" libCounter !
+    begin
+        libScratch @ libString @ libCounter @ strcat over over
+        getpropstr while
+        remove_prop
+        scounter++
+    repeat
+    pop pop
+;
+Public RemoveDir
+  
+: ShowList  ( d s --  )                    (* show list s on d to user *)
+    
+    "#/" strcat libString ! libScratch !
+    "1" libCounter !
+    begin
+        libScratch @ libString @ libCounter @ strcat 
+        getpropstr dup while
+        Tell
+        scounter++
+    repeat
+    pop
+; 
+Public ShowList
+    
+: MoveDir  ( d s d' s' --  )                  (* move directory s on d
+                                                 to directory s' on d' *)
+    
+    libCounter2 ! libString ! libCounter ! libScratch !
+    libScratch @ libCounter @ nextprop libCounter !
+    begin
+        libCounter @ while
+        libScratch @ libCounter @ getprop
+        libCounter @ dup "/" rinstr dup if
+            strcut libCounter2 @ swap strcat swap pop
+            else
+                pop pop
+        then
+        swap libString @ rot rot setprop
+        libScratch @ libCounter @ over over
+        nextprop libCounter ! 
+        remove_prop
+    repeat
+;
+Public MoveDir
+  
+: MakeString  ( x -- s )                     (* convert i's to strings; 
+                                                convert d's to names   *)
+    dup int? if intostr exit then
+    dup dbref? if name then
+;
+  
+: 3-col  ( {rng} i --  )            (* output the i top things on the 
+                                       stack in 3 columns; top item on 
+                                       stack will be shown last        *)
+    
+    dup 3 %                                   (* fill to multiple of 3 *)
+    dup 1 = if
+        pop 2 + " " " " rot
+        else
+        dup 2 = if
+            pop 1 + " " swap
+            else
+                pop
+        then
+    then
+    begin                                  (* get next 3; format; show *)        
+        dup 3 > while
+        dup 1 + rotate swap
+        dup 1 + rotate swap
+        dup 1 + rotate swap
+        4 rotate MakeString 24 Pad 
+        4 rotate MakeString 24 Pad strcat 
+        3 rotate MakeString 24 Pad strcat me @ swap notify
+        3 -
+    repeat
+    pop
+                                             (* format and show last 3 *)
+    rot 24 Pad rot 24 Pad strcat swap strcat me @ swap notify
+;
+public 3-col
+  
+: 3-coln  ( {rng} i --  )    (* output the top i things on the stack in
+                                3 columns of numbered items; top thing
+                                on the stack will be shown last        *)
+    
+    dup 3 %                                   (* fill to multiple of 3 *)
+    dup 1 = if
+        pop 2 + " " " " rot
+        else
+        dup 2 = if
+            pop 1 + " " swap
+            else
+                pop
+        then
+    then
+    1 swap
+    begin                                (* get next 3; format; output *)
+        dup 3 > while
+        dup 2 + rotate rot rot
+        dup 2 + rotate rot rot
+        dup 2 + rotate rot rot
+        5 rotate 3 pick intostr ")" strcat 4 Pad swap 
+        MakeString strcat 24 Pad
+        3 pick 1 + 3 put
+        5 rotate 4 pick intostr ")" strcat 4 Pad swap 
+        MakeString strcat 24 Pad strcat 
+        3 pick 1 + 3 put
+        4 Rotate 4 pick intostr ")" strcat 4 Pad swap 
+        MakeString strcat 24 Pad strcat 
+        3 pick 1 + 3 put
+        me @ swap notify
+        3 -
+    repeat
+                                            (* format and outpu last 3 *)
+    pop 4 rotate 4 rotate 4 rotate swap rot
+    dup " " smatch not if
+        4 pick intostr ")" strcat 4 Pad swap 
+        MakeString strcat 24 Pad 
+        4 pick 1 + 4 put    
+        else
+            pop pop pop pop exit
+    then
+    
+    over " " smatch not if
+        4 pick intostr ")" strcat 4 Pad rot
+        MakeString strcat 24 pad strcat
+        3 pick 1 + 3 put
+        else
+            me @ swap notify pop pop pop exit
+    then
+    
+    over " " smatch not if
+        rot intostr ")" strcat 4 Pad strcat swap
+        MakeString strcat me @ swap notify
+        else
+            me @ swap notify pop pop exit
+    then
+;
+public 3-coln
+  
+: DoInstall
+    
+    #0 "_reg/lib/mucktools" prog setprop 
+    
+    prog "_defs/Pad"      
+    "\"$lib/mucktools\" match \"Pad\" call"            setprop
+    prog "_defs/LPad"     
+    "\"$lib/mucktools\" match \"LPad\" call"           setprop
+    prog "_defs/Dots"     
+    "\"$lib/mucktools\" match \"Dots\" call"           setprop
+    prog "_defs/LDots"    
+    "\"$lib/mucktools\" match \"LDots\" call"          setprop
+    prog "_defs/A-An"     
+    "\"$lib/mucktools\" match \"A-An\" call"           setprop
+    prog "_defs/ParseThis"     
+    "\"$lib/mucktools\" match \"ParseThis\" call"      setprop
+    prog "_defs/SayPose"  
+    "\"$lib/mucktools\" match \"SayPose\" call"        setprop
+    prog "_defs/QCheck"   
+    "\"$lib/mucktools\" match \"QCheck\" call"         setprop
+    prog "_defs/ReadYesNo" 
+    "\"$lib/mucktools\" match \"ReadYesNo\" call"      setprop
+    prog "_defs/NoPlayer" 
+    "\"$lib/mucktools\" match \"NoPlayer\" call"       setprop
+    prog "_defs/MainName"
+    "\"$lib/mucktools\" match \"MainName\" call"       setprop
+    prog "_defs/ShowList"
+    "\"$lib/mucktools\" match \"ShowList\" call"       setprop
+    prog "_defs/ReadLine"
+    "\"$lib/mucktools\" match \"SayPose\" call"        setprop
+    prog "_defs/RemoveList"     
+    "\"$lib/mucktools\" match \"RemoveDir\" call"      setprop
+     prog "_defs/RemoveDir"     
+    "\"$lib/mucktools\" match \"RemoveDir\" call"      setprop
+    prog "_defs/MoveDir"    
+    "\"$lib/mucktools\" match \"MoveDir\" call"        setprop
+    prog "_defs/3-col" 
+    "\"$lib/mucktools\" match \"3-col\" call"          setprop
+    prog "_defs/3-coln"
+    "\"$lib/mucktools\" match \"3-coln\" call"         setprop
+    
+    prog "_docs" "@list $lib/mucktools=1-85"           setprop
+    
+    trig getlink prog dbcmp if
+        ">>  Installed. Please recycle #" trig intostr strcat .tell
+    then
+;
+.
+c
+q
+@set lib-mucktools=L
+@reg lib-mucktools=lib/mucktools
+
