@@ -4,8 +4,9 @@
 set input [open "test/commands"]
 set address 192.168.1.202
 set port 6666
+set linecount 0
 
-set delay 2000
+set delay 500
 set characters(list) {null keeper}
 set characters(null.pass) "null"
 set characters(null.channel) [open "log/null.out" "w+"]
@@ -29,19 +30,11 @@ global characters
 global address
 global port
 
-puts 1111
    set characters($name.log) [open "log/$name.log" "w"]
-puts 2222
    set characters($name.channel) [socket $address $port]
-puts 3333
-   fconfigure $characters($name.log) -blocking false -buffering none
-puts 4444
+   fconfigure $characters($name.channel) -blocking false -buffering none
    wait
-puts 5555
    sendline $name "connect $name $characters($name.pass)"
-puts 6666
-   wait
-puts 7777
 }
 
 proc addchar {name pass} {
@@ -54,13 +47,12 @@ proc addchar {name pass} {
       puts "-- Creating new character ($name) with password ($pass)"
       lappend characters(list) $name
       set characters($name.pass) $pass
-puts xxx
       openchar $name $pass
-puts yyy
    }
 }
 
 proc parseline {line} {
+global linecount
 # Main loop action. This dispatches other actions like character creation
 # and other special actions that require updates on internal program stuff.
    set splitpoint [string first "  " $line]
@@ -68,16 +60,18 @@ proc parseline {line} {
    set nameend [expr {[string first "(" $line] - 1}]
    set namestart [expr {[string last " " $line $nameend] + 1}]
    set name [string range $line $namestart $nameend]
-puts ">$name< >$content<"
+   incr linecount
+   puts "$linecount >$name< >$content<"
+   sendline $name $content
    # Since all we actually need to do is catch @pcreate
    # we test for them.
    if {[string equal -nocase -len 8 "@pcreate" $content]} {
       # We have @pcreate
       set newname [string range $content 9 [expr {[string first "=" $content] -1}]]
       set newpass [string range $content [expr {[string first "=" $content] + 1}] end]
+      wait
       addchar $newname $newpass
    }
-   sendline $name $content
 }
 
 proc wait {} {
@@ -89,15 +83,11 @@ global delay
 proc emptyrecv {} {
 global characters
 
-puts aaa
    foreach name $characters(list) {
-puts "bbb $name"
-puts [eof $characters($name.channel)]
-      set line [read $characters($name.channel)]
-puts "ccc $name"
-      puts $characters($name.log) "<$line"
-      puts "$name < $line"
-puts ddd
+      while {[gets $characters($name.channel) line] >= 0} {
+         puts $characters($name.log) "<$line"
+         puts "$name < $line"
+      }
    }
 }
 
@@ -107,8 +97,6 @@ gets $input line
 emptyrecv
 while {! [eof $input]} {
    parseline $line
-   emptyrecv
    wait
-   emptyrecv
    gets $input line
 }
