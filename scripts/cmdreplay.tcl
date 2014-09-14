@@ -17,11 +17,12 @@ set characters(keeper.log) [open "log/keeper.log" "w"]
 
 proc sendline {name content} {
 global characters
+global linecount
 set name [string tolower $name]
 
    puts "$name : $content"
    puts $characters($name.channel) $content
-   puts $characters($name.log) ">$content"
+   puts $characters($name.log) "$linecount>$content"
 }
 
 proc openchar {name pass} {
@@ -71,6 +72,7 @@ global linecount
       set newpass [string range $content [expr {[string first "=" $content] + 1}] end]
       wait
       addchar $newname $newpass
+      sendline one "give *$newname=10000"
    }
 }
 
